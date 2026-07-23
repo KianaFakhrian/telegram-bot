@@ -1,7 +1,7 @@
 import hashlib
+import re
 
 from telegram import Update
-
 from telegram.ext import (
     Application,
     MessageHandler,
@@ -9,16 +9,18 @@ from telegram.ext import (
     filters
 )
 
-
 from config import TOKEN
-
 import database
 
 
-
+# ساخت جدول دیتابیس
 database.create_table()
 
 
+
+# -----------------------------
+# تبدیل متن به hash
+# -----------------------------
 
 def make_hash(text):
 
@@ -28,30 +30,98 @@ def make_hash(text):
 
 
 
+# -----------------------------
+# تمیز کردن متن
+# -----------------------------
+
+def normalize_text(text):
+
+    text = text.lower()
+
+    # حذف فاصله‌های اضافی
+    text = re.sub(
+        r"\s+",
+        " ",
+        text
+    )
+
+    return text.strip()
+
+
+
+# -----------------------------
+# تشخیص لینک
+# -----------------------------
+
 def has_link(message):
 
+    text = ""
+
+    if message.text:
+        text = message.text
+
+    elif message.caption:
+        text = message.caption
+
+
+    # لینک‌هایی مثل:
+    # https://google.com
+    # www.google.com
+    # quera.org
+
+    pattern = r"""
+    (?ix)
+    (
+        https?://\S+
+        |
+        www\.\S+
+        |
+        \b[a-z0-9-]+\.(com|org|net|ir|io|edu|ai)(/\S*)?
+    )
+    """
+
+
+    result = re.search(
+        pattern,
+        text
+    )
+
+
+    # برای تست در لاگ Railway
+    print(
+        "LINK CHECK:",
+        text,
+        result
+    )
+
+
+    if result:
+        return True
+
+
+
+    # بررسی لینک‌هایی که خود تلگرام تشخیص داده
 
     if message.entities:
 
-        for e in message.entities:
+        for entity in message.entities:
 
-            if e.type in [
+            if entity.type in [
                 "url",
                 "text_link"
             ]:
-
                 return True
+
 
 
     if message.caption_entities:
 
-        for e in message.caption_entities:
+        for entity in message.caption_entities:
 
-            if e.type in [
+            if entity.type in [
                 "url",
                 "text_link"
             ]:
-
                 return True
 
 
@@ -59,53 +129,65 @@ def has_link(message):
 
 
 
-
+# -----------------------------
+# بررسی پیام‌ها
+# -----------------------------
 
 async def check_message(
-        update:Update,
-        context:ContextTypes.DEFAULT_TYPE):
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE):
 
 
-    message=update.message
+    message = update.message
 
 
-    text = message.text.strip()
-
-
-    # پیام های کوتاه را نادیده بگیر
-    word_count = len(text.split())
-
-    if word_count < 10:
+    if not message:
         return
 
 
 
-    # حذف لینک
+    # =========================
+    # مرحله اول: حذف لینک
+    # =========================
 
     if has_link(message):
 
-        await message.delete()
+        try:
 
-        print("Link deleted")
+            await message.delete()
+
+            print(
+                "LINK DELETED"
+            )
+
+        except Exception as e:
+
+            print(
+                "DELETE ERROR:",
+                e
+            )
+
 
         return
 
 
 
-    text=""
 
+    # =========================
+    # گرفتن متن
+    # =========================
+
+    text = ""
 
 
     if message.text:
 
-        text=message.text
-
+        text = message.text
 
 
     elif message.caption:
 
-        text=message.caption
-
+        text = message.caption
 
 
     else:
@@ -114,34 +196,80 @@ async def check_message(
 
 
 
-    hash_value=make_hash(text)
+    text = normalize_text(text)
 
 
 
-    # پیام تکراری
+    # =========================
+    # پیام کوتاه دست نخورَد
+    # =========================
+
+    word_count = len(
+        text.split()
+    )
+
+
+    if word_count < 10:
+
+        print(
+            "SHORT MESSAGE IGNORED:",
+            text
+        )
+
+        return
+
+
+
+
+    # =========================
+    # بررسی تکراری بودن
+    # =========================
+
+
+    hash_value = make_hash(text)
+
+
 
     if database.exists(hash_value):
 
 
-        await message.delete()
+        try:
+
+            await message.delete()
+
+            print(
+                "DUPLICATE DELETED:",
+                text
+            )
 
 
-        print(
-        "Duplicate deleted:",
-        text
-        )
+        except Exception as e:
+
+            print(
+                "DELETE ERROR:",
+                e
+            )
 
 
         return
 
 
 
-    username="unknown"
+
+    # =========================
+    # ذخیره پیام اول
+    # =========================
+
+
+    username = "unknown"
 
 
     if message.from_user:
 
-        username=message.from_user.username
+        username = (
+            message.from_user.username
+            or "unknown"
+        )
 
 
 
@@ -152,32 +280,38 @@ async def check_message(
 
 
     print(
-    "Saved:",
-    text
+        "MESSAGE SAVED:",
+        text
     )
 
 
 
 
 
-app=Application.builder()\
-.token(TOKEN)\
-.build()
+# -----------------------------
+# اجرای ربات
+# -----------------------------
+
+
+app = Application.builder()\
+    .token(TOKEN)\
+    .build()
 
 
 
-handler=MessageHandler(
-    filters.ALL,
-    check_message
+app.add_handler(
+    MessageHandler(
+        filters.ALL,
+        check_message
+    )
 )
 
 
 
-app.add_handler(handler)
+print(
+    "Bot Started..."
+)
 
-
-
-print("Bot Started...")
 
 
 app.run_polling()
