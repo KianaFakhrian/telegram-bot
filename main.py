@@ -144,6 +144,7 @@ async def check_message(
     if not message:
         return
 
+    print("NEW MESSAGE:", update.message.text)
 
 
     # =========================
