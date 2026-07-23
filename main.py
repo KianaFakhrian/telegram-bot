@@ -13,32 +13,18 @@ from config import TOKEN
 import database
 
 
-# ساخت جدول دیتابیس
+# ساخت دیتابیس
 database.create_table()
 
 
-
 # -----------------------------
-# تبدیل متن به hash
-# -----------------------------
-
-def make_hash(text):
-
-    return hashlib.md5(
-        text.encode("utf-8")
-    ).hexdigest()
-
-
-
-# -----------------------------
-# تمیز کردن متن
+# نرمال سازی متن
 # -----------------------------
 
 def normalize_text(text):
 
     text = text.lower()
 
-    # حذف فاصله‌های اضافی
     text = re.sub(
         r"\s+",
         " ",
@@ -46,6 +32,18 @@ def normalize_text(text):
     )
 
     return text.strip()
+
+
+
+# -----------------------------
+# ساخت شناسه پیام
+# -----------------------------
+
+def make_hash(text):
+
+    return hashlib.md5(
+        text.encode("utf-8")
+    ).hexdigest()
 
 
 
@@ -63,11 +61,6 @@ def has_link(message):
     elif message.caption:
         text = message.caption
 
-
-    # لینک‌هایی مثل:
-    # https://google.com
-    # www.google.com
-    # quera.org
 
     pattern = r"""
     (?ix)
@@ -87,7 +80,6 @@ def has_link(message):
     )
 
 
-    # برای تست در لاگ Railway
     print(
         "LINK CHECK:",
         text,
@@ -100,11 +92,16 @@ def has_link(message):
 
 
 
-    # بررسی لینک‌هایی که خود تلگرام تشخیص داده
+    # بررسی تشخیص خود تلگرام
 
     if message.entities:
 
         for entity in message.entities:
+
+            print(
+                "ENTITY:",
+                entity.type
+            )
 
             if entity.type in [
                 "url",
@@ -130,7 +127,7 @@ def has_link(message):
 
 
 # -----------------------------
-# بررسی پیام‌ها
+# بررسی پیام
 # -----------------------------
 
 async def check_message(
@@ -138,18 +135,30 @@ async def check_message(
         context: ContextTypes.DEFAULT_TYPE):
 
 
+    print("UPDATE RECEIVED")
+
+
     message = update.message
 
 
     if not message:
+
+        print("NO MESSAGE")
+
         return
 
-    print("NEW MESSAGE:", update.message.text)
 
 
-    # =========================
-    # مرحله اول: حذف لینک
-    # =========================
+    print(
+        "TEXT:",
+        message.text
+    )
+
+
+
+    # -------------------------
+    # اول لینک
+    # -------------------------
 
     if has_link(message):
 
@@ -168,15 +177,13 @@ async def check_message(
                 e
             )
 
-
         return
 
 
 
-
-    # =========================
+    # -------------------------
     # گرفتن متن
-    # =========================
+    # -------------------------
 
     text = ""
 
@@ -201,19 +208,19 @@ async def check_message(
 
 
 
-    # =========================
-    # پیام کوتاه دست نخورَد
-    # =========================
+    # -------------------------
+    # پیام کوتاه آزاد است
+    # -------------------------
 
-    word_count = len(
+    words = len(
         text.split()
     )
 
 
-    if word_count < 10:
+    if words < 10:
 
         print(
-            "SHORT MESSAGE IGNORED:",
+            "SHORT MESSAGE:",
             text
         )
 
@@ -221,18 +228,15 @@ async def check_message(
 
 
 
-
-    # =========================
-    # بررسی تکراری بودن
-    # =========================
-
+    # -------------------------
+    # بررسی تکراری
+    # -------------------------
 
     hash_value = make_hash(text)
 
 
 
     if database.exists(hash_value):
-
 
         try:
 
@@ -256,11 +260,9 @@ async def check_message(
 
 
 
-
-    # =========================
+    # -------------------------
     # ذخیره پیام اول
-    # =========================
-
+    # -------------------------
 
     username = "unknown"
 
@@ -284,8 +286,6 @@ async def check_message(
         "MESSAGE SAVED:",
         text
     )
-
-
 
 
 
