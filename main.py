@@ -62,21 +62,13 @@ def has_link(message):
         text = message.caption
 
 
-    pattern = r"""
-    (?ix)
-    (
-        https?://\S+
-        |
-        www\.\S+
-        |
-        \b[a-z0-9-]+\.(com|org|net|ir|io|edu|ai)(/\S*)?
-    )
-    """
+    pattern = r"(https?://\S+|www\.\S+|\b[a-zA-Z0-9-]+\.(com|org|net|ir|io|edu|ai)(/\S*)?)"
 
 
     result = re.search(
         pattern,
-        text
+        text,
+        re.IGNORECASE
     )
 
 
@@ -90,9 +82,6 @@ def has_link(message):
     if result:
         return True
 
-
-
-    # بررسی تشخیص خود تلگرام
 
     if message.entities:
 
@@ -108,7 +97,6 @@ def has_link(message):
                 "text_link"
             ]:
                 return True
-
 
 
     if message.caption_entities:
