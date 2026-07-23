@@ -9,21 +9,26 @@ from telegram.ext import (
     filters
 )
 
-from config import TOKEN
-import database
+from database import (
+    init_db,
+    is_duplicate,
+    save_message_hash
+)
+
+import config
 
 
-# ساخت دیتابیس
-database.create_table()
 
-
-# -----------------------------
-# نرمال سازی متن
-# -----------------------------
+# -------------------------
+# Normalize text
+# -------------------------
 
 def normalize_text(text):
 
-    text = text.lower()
+    if not text:
+        return ""
+
+    text = text.strip()
 
     text = re.sub(
         r"\s+",
@@ -31,100 +36,177 @@ def normalize_text(text):
         text
     )
 
-    return text.strip()
+    return text.lower()
 
 
 
-# -----------------------------
-# ساخت شناسه پیام
-# -----------------------------
+# -------------------------
+# Check links
+# -------------------------
 
-def make_hash(text):
+def has_link(text):
 
-    return hashlib.md5(
-        text.encode("utf-8")
+    if not text:
+        return False
+
+
+    pattern = r"""
+    (
+    https?://
+    |
+    www\.
+    |
+    \.com
+    |
+    \.ir
+    |
+    \.org
+    )
+    """
+
+
+    return re.search(
+        pattern,
+        text,
+        re.IGNORECASE | re.VERBOSE
+    ) is not None
+
+
+
+
+# -------------------------
+# Hash maker
+# -------------------------
+
+def create_hash(value):
+
+    return hashlib.sha256(
+        value.encode("utf-8")
     ).hexdigest()
 
 
 
-# -----------------------------
-# تشخیص لینک
-# -----------------------------
 
-def has_link(message):
+# -------------------------
+# Create fingerprint
+# -------------------------
 
-    text = ""
-
-    if message.text:
-        text = message.text
-
-    elif message.caption:
-        text = message.caption
+def generate_content_hash(message):
 
 
-    pattern = r"(https?://\S+|www\.\S+|\b[a-zA-Z0-9-]+\.(com|org|net|ir|io|edu|ai)(/\S*)?)"
+    # PHOTO
 
-    print("NEW LINK FUNCTION")
-
-    result = re.search(
-        pattern,
-        text,
-        re.IGNORECASE
-    )
+    if message.photo:
 
 
-    print(
-        "LINK CHECK:",
-        text,
-        result
-    )
+        photo_id = message.photo[-1].file_unique_id
 
 
-    if result:
-        return True
+        caption = normalize_text(
+            message.caption
+        )
 
 
-    if message.entities:
+        if caption:
 
-        for entity in message.entities:
-
-            print(
-                "ENTITY:",
-                entity.type
+            data = (
+                f"photo_{photo_id}"
+                f"_caption_{caption}"
             )
 
-            if entity.type in [
-                "url",
-                "text_link"
-            ]:
-                return True
+
+        else:
+
+            data = (
+                f"photo_{photo_id}"
+            )
 
 
-    if message.caption_entities:
-
-        for entity in message.caption_entities:
-
-            if entity.type in [
-                "url",
-                "text_link"
-            ]:
-                return True
-
-
-    return False
+        return create_hash(data)
 
 
 
-# -----------------------------
-# بررسی پیام
-# -----------------------------
 
-async def check_message(
+    # VIDEO
+
+    if message.video:
+
+
+        video_id = message.video.file_unique_id
+
+
+        caption = normalize_text(
+            message.caption
+        )
+
+
+        if caption:
+
+            data = (
+                f"video_{video_id}"
+                f"_caption_{caption}"
+            )
+
+
+        else:
+
+            data = (
+                f"video_{video_id}"
+            )
+
+
+        return create_hash(data)
+
+
+
+
+    # TEXT
+
+    if message.text:
+
+
+        text = normalize_text(
+            message.text
+        )
+
+
+        words = len(
+            text.split()
+        )
+
+
+        # پیام کوتاه نادیده گرفته شود
+
+        if words < 10:
+
+            return None
+
+
+
+        data = (
+            f"text_{text}"
+        )
+
+
+        return create_hash(data)
+
+
+
+
+    return None
+
+
+
+
+
+# -------------------------
+# Main handler
+# -------------------------
+
+async def message_handler(
         update: Update,
-        context: ContextTypes.DEFAULT_TYPE):
-
-
-    print("UPDATE RECEIVED")
+        context: ContextTypes.DEFAULT_TYPE
+):
 
 
     message = update.message
@@ -132,115 +214,59 @@ async def check_message(
 
     if not message:
 
-        print("NO MESSAGE")
-
         return
 
 
 
-    print(
-        "TEXT:",
+    # بررسی لینک
+
+    content = (
         message.text
+        or
+        message.caption
+    )
+
+
+    if has_link(content):
+
+        await message.delete()
+
+        return
+
+
+
+    # ساخت fingerprint
+
+    content_hash = generate_content_hash(
+        message
     )
 
 
 
-    # -------------------------
-    # اول لینک
-    # -------------------------
+    # پیام کوتاه
 
-    if has_link(message):
-
-        try:
-
-            await message.delete()
-
-            print(
-                "LINK DELETED"
-            )
-
-        except Exception as e:
-
-            print(
-                "DELETE ERROR:",
-                e
-            )
+    if content_hash is None:
 
         return
 
 
 
-    # -------------------------
-    # گرفتن متن
-    # -------------------------
 
-    text = ""
-
-
-    if message.text:
-
-        text = message.text
-
-
-    elif message.caption:
-
-        text = message.caption
-
-
-    else:
-
-        return
-
-
-
-    text = normalize_text(text)
-
-
-
-    # -------------------------
-    # پیام کوتاه آزاد است
-    # -------------------------
-
-    words = len(
-        text.split()
-    )
-
-
-    if words < 10:
-
-        print(
-            "SHORT MESSAGE:",
-            text
-        )
-
-        return
-
-
-
-    # -------------------------
     # بررسی تکراری
-    # -------------------------
-
-    hash_value = make_hash(text)
 
 
+    if is_duplicate(content_hash):
 
-    if database.exists(hash_value):
 
         try:
 
             await message.delete()
 
-            print(
-                "DUPLICATE DELETED:",
-                text
-            )
-
 
         except Exception as e:
 
             print(
-                "DELETE ERROR:",
+                "Delete error:",
                 e
             )
 
@@ -249,59 +275,62 @@ async def check_message(
 
 
 
-    # -------------------------
-    # ذخیره پیام اول
-    # -------------------------
 
-    username = "unknown"
+    # ذخیره اولین پیام
 
 
-    if message.from_user:
+    save_message_hash(
+        message.chat.id,
+        content_hash
+    )
 
-        username = (
-            message.from_user.username
-            or "unknown"
+
+
+
+
+
+# -------------------------
+# Start Bot
+# -------------------------
+
+def main():
+
+
+    init_db()
+
+
+
+    app = (
+        Application
+        .builder()
+        .token(config.TOKEN)
+        .build()
+    )
+
+
+
+    app.add_handler(
+
+        MessageHandler(
+            filters.ALL,
+            message_handler
         )
 
-
-
-    database.save(
-        hash_value,
-        username
     )
+
 
 
     print(
-        "MESSAGE SAVED:",
-        text
+        "Bot Started..."
     )
 
 
 
-# -----------------------------
-# اجرای ربات
-# -----------------------------
-
-
-app = Application.builder()\
-    .token(TOKEN)\
-    .build()
+    app.run_polling()
 
 
 
-app.add_handler(
-    MessageHandler(
-        filters.ALL,
-        check_message
-    )
-)
 
+if __name__ == "__main__":
 
-
-print(
-    "Bot Started..."
-)
-
-
-
-app.run_polling()
+    main()

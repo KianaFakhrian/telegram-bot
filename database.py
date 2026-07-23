@@ -1,26 +1,30 @@
 import sqlite3
 
+
 DB_NAME = "messages.db"
 
-import os
 
-print("Database location:", os.path.abspath(DB_NAME))
-
-def connect():
+def get_connection():
     return sqlite3.connect(DB_NAME)
 
 
-def create_table():
 
-    conn = connect()
+def init_db():
+
+    conn = get_connection()
     cursor = conn.cursor()
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS messages(
+
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        hash TEXT UNIQUE NOT NULL,
-        user TEXT,
-        date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+
+        chat_id INTEGER,
+
+        content_hash TEXT UNIQUE,
+
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+
     )
     """)
 
@@ -29,36 +33,68 @@ def create_table():
 
 
 
-def exists(hash_value):
+def is_duplicate(content_hash):
 
-    conn = connect()
+    conn = get_connection()
     cursor = conn.cursor()
 
+
     cursor.execute(
-        "SELECT id FROM messages WHERE hash=?",
-        (hash_value,)
+        """
+        SELECT id 
+        FROM messages
+        WHERE content_hash = ?
+        """,
+        (content_hash,)
     )
+
 
     result = cursor.fetchone()
 
+
     conn.close()
+
 
     return result is not None
 
 
 
-def save(hash_value, user):
 
-    conn = connect()
+def save_message_hash(chat_id, content_hash):
+
+    conn = get_connection()
     cursor = conn.cursor()
 
-    cursor.execute(
-        """
-        INSERT OR IGNORE INTO messages(hash,user)
-        VALUES(?,?)
-        """,
-        (hash_value, user)
-    )
 
-    conn.commit()
-    conn.close()
+    try:
+
+        cursor.execute(
+            """
+            INSERT INTO messages
+            (
+            chat_id,
+            content_hash
+            )
+            VALUES (?,?)
+            """,
+
+            (
+                chat_id,
+                content_hash
+            )
+
+        )
+
+
+        conn.commit()
+
+
+    except sqlite3.IntegrityError:
+
+        # اگر قبلا وجود داشته باشد
+        pass
+
+
+    finally:
+
+        conn.close()
