@@ -64,6 +64,7 @@ def has_link(message):
 
     pattern = r"(https?://\S+|www\.\S+|\b[a-zA-Z0-9-]+\.(com|org|net|ir|io|edu|ai)(/\S*)?)"
 
+    print("NEW LINK FUNCTION")
 
     result = re.search(
         pattern,
