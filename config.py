@@ -1,4 +1,6 @@
-TOKEN = "8942980288:AAH2L56Q5Py1Hp4gbX8B4V8SHsa5DtzYkTg"
+import os
+
+TOKEN = os.getenv("TOKEN")
 
 
 GROUP_ID = None
