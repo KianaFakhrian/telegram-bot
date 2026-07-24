@@ -4,15 +4,20 @@ import sqlite3
 DB_NAME = "messages.db"
 
 
+
 def get_connection():
+
     return sqlite3.connect(DB_NAME)
+
 
 
 
 def init_db():
 
     conn = get_connection()
+
     cursor = conn.cursor()
+
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS messages(
@@ -28,14 +33,18 @@ def init_db():
     )
     """)
 
+
     conn.commit()
+
     conn.close()
+
 
 
 
 def is_duplicate(content_hash):
 
     conn = get_connection()
+
     cursor = conn.cursor()
 
 
@@ -60,9 +69,11 @@ def is_duplicate(content_hash):
 
 
 
+
 def save_message_hash(chat_id, content_hash):
 
     conn = get_connection()
+
     cursor = conn.cursor()
 
 
@@ -72,8 +83,8 @@ def save_message_hash(chat_id, content_hash):
             """
             INSERT INTO messages
             (
-            chat_id,
-            content_hash
+                chat_id,
+                content_hash
             )
             VALUES (?,?)
             """,
@@ -82,17 +93,17 @@ def save_message_hash(chat_id, content_hash):
                 chat_id,
                 content_hash
             )
-
         )
 
 
         conn.commit()
 
 
+
     except sqlite3.IntegrityError:
 
-        # اگر قبلا وجود داشته باشد
         pass
+
 
 
     finally:

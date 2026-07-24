@@ -91,7 +91,32 @@ def has_link(text):
 
 
 
+# -----------------------------
+# Detect Telegram IDs
+# -----------------------------
 
+def has_telegram_id(text):
+
+    if not text:
+        return False
+
+
+    pattern = r"""
+    (
+        @[a-zA-Z0-9_]{3,}
+        |
+        t\.me/[a-zA-Z0-9_]+
+        |
+        telegram\.me/[a-zA-Z0-9_]+
+    )
+    """
+
+
+    return re.search(
+        pattern,
+        text,
+        re.IGNORECASE | re.VERBOSE
+    ) is not None
 
 # -----------------------------
 # Hash Generator
@@ -292,8 +317,7 @@ async def message_handler(
 
 
 
-    if has_link(full_content):
-
+    if (has_link(full_content) or has_telegram_id(full_content)):
 
         try:
 
