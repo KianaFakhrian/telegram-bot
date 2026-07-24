@@ -1,7 +1,10 @@
 import hashlib
 import re
 
+
 from telegram import Update
+
+
 from telegram.ext import (
     Application,
     MessageHandler,
@@ -9,60 +12,75 @@ from telegram.ext import (
     filters
 )
 
+
+
 from database import (
     init_db,
     is_duplicate,
     save_message_hash
 )
 
+
+
 import config
 
 
 
-# -------------------------
-# Normalize text
-# -------------------------
+
+
+# -----------------------------
+# Normalize Text
+# -----------------------------
 
 def normalize_text(text):
 
     if not text:
+
         return ""
 
-    text = text.strip()
 
-    text = re.sub(
+    text=text.strip()
+
+
+    text=re.sub(
         r"\s+",
         " ",
         text
     )
 
+
     return text.lower()
 
 
 
-# -------------------------
-# Check links
-# -------------------------
+
+
+# -----------------------------
+# Detect Link
+# -----------------------------
 
 def has_link(text):
 
     if not text:
+
         return False
 
 
-    pattern = r"""
+
+    pattern=r"""
     (
-    https?://
-    |
-    www\.
-    |
-    \.com
-    |
-    \.ir
-    |
-    \.org
+        https?://
+        |
+        www\.
+        |
+        t\.me/
+        |
+        telegram\.me/
+        |
+        [a-zA-Z0-9-]+\.(com|ir|org|net|io|co)
     )
     """
+
 
 
     return re.search(
@@ -74,27 +92,31 @@ def has_link(text):
 
 
 
-# -------------------------
-# Hash maker
-# -------------------------
 
-def create_hash(value):
+# -----------------------------
+# Hash Generator
+# -----------------------------
+
+def create_hash(data):
 
     return hashlib.sha256(
-        value.encode("utf-8")
+        data.encode("utf-8")
     ).hexdigest()
 
 
 
 
-# -------------------------
-# Create fingerprint
-# -------------------------
+
+# -----------------------------
+# Generate Fingerprint
+# -----------------------------
 
 def generate_content_hash(message):
 
 
+    # -----------------
     # PHOTO
+    # -----------------
 
     if message.photo:
 
@@ -110,16 +132,19 @@ def generate_content_hash(message):
         if caption:
 
             data = (
-                f"photo_{photo_id}"
-                f"_caption_{caption}"
+                f"photo:"
+                f"{photo_id}:"
+                f"{caption}"
             )
 
 
         else:
 
             data = (
-                f"photo_{photo_id}"
+                f"photo:"
+                f"{photo_id}"
             )
+
 
 
         return create_hash(data)
@@ -127,7 +152,10 @@ def generate_content_hash(message):
 
 
 
+
+    # -----------------
     # VIDEO
+    # -----------------
 
     if message.video:
 
@@ -135,24 +163,29 @@ def generate_content_hash(message):
         video_id = message.video.file_unique_id
 
 
+
         caption = normalize_text(
             message.caption
         )
 
 
+
         if caption:
 
             data = (
-                f"video_{video_id}"
-                f"_caption_{caption}"
+                f"video:"
+                f"{video_id}:"
+                f"{caption}"
             )
 
 
         else:
 
             data = (
-                f"video_{video_id}"
+                f"video:"
+                f"{video_id}"
             )
+
 
 
         return create_hash(data)
@@ -160,7 +193,11 @@ def generate_content_hash(message):
 
 
 
+
+
+    # -----------------
     # TEXT
+    # -----------------
 
     if message.text:
 
@@ -170,26 +207,29 @@ def generate_content_hash(message):
         )
 
 
-        words = len(
+
+        word_count=len(
             text.split()
         )
 
 
-        # پیام کوتاه نادیده گرفته شود
 
-        if words < 10:
+        # پیام های کوتاه حذف نشوند
+
+        if word_count < 10:
 
             return None
 
 
 
         data = (
-            f"text_{text}"
+            f"text:"
+            f"{text}"
         )
 
 
-        return create_hash(data)
 
+        return create_hash(data)
 
 
 
@@ -199,17 +239,18 @@ def generate_content_hash(message):
 
 
 
-# -------------------------
-# Main handler
-# -------------------------
+# -----------------------------
+# Main Message Handler
+# -----------------------------
 
 async def message_handler(
-        update: Update,
-        context: ContextTypes.DEFAULT_TYPE
+        update:Update,
+        context:ContextTypes.DEFAULT_TYPE
 ):
 
 
-    message = update.message
+    message=update.message
+
 
 
     if not message:
@@ -218,32 +259,68 @@ async def message_handler(
 
 
 
-    # بررسی لینک
 
-    content = (
-        message.text
-        or
-        message.caption
+
+    # -----------------
+    # Link Detection
+    # -----------------
+
+
+    content_parts=[]
+
+
+
+    if message.text:
+
+        content_parts.append(
+            message.text
+        )
+
+
+
+    if message.caption:
+
+        content_parts.append(
+            message.caption
+        )
+
+
+
+    full_content=" ".join(
+        content_parts
     )
 
 
-    if has_link(content):
 
-        await message.delete()
+    if has_link(full_content):
+
+
+        try:
+
+            await message.delete()
+
+
+        except Exception as e:
+
+            print(e)
+
 
         return
 
 
 
-    # ساخت fingerprint
+
+
+
+    # -----------------
+    # Create Hash
+    # -----------------
 
     content_hash = generate_content_hash(
         message
     )
 
 
-
-    # پیام کوتاه
 
     if content_hash is None:
 
@@ -252,8 +329,10 @@ async def message_handler(
 
 
 
-    # بررسی تکراری
 
+    # -----------------
+    # Duplicate Check
+    # -----------------
 
     if is_duplicate(content_hash):
 
@@ -266,7 +345,7 @@ async def message_handler(
         except Exception as e:
 
             print(
-                "Delete error:",
+                "Delete Error:",
                 e
             )
 
@@ -276,8 +355,11 @@ async def message_handler(
 
 
 
-    # ذخیره اولین پیام
 
+
+    # -----------------
+    # Save First Message
+    # -----------------
 
     save_message_hash(
         message.chat.id,
@@ -289,27 +371,31 @@ async def message_handler(
 
 
 
-# -------------------------
+# -----------------------------
 # Start Bot
-# -------------------------
+# -----------------------------
 
 def main():
+
 
 
     init_db()
 
 
 
-    app = (
+    application=(
+
         Application
         .builder()
         .token(config.TOKEN)
         .build()
+
     )
 
 
 
-    app.add_handler(
+
+    application.add_handler(
 
         MessageHandler(
             filters.ALL,
@@ -320,17 +406,19 @@ def main():
 
 
 
+
     print(
         "Bot Started..."
     )
 
 
 
-    app.run_polling()
+    application.run_polling()
 
 
 
 
-if __name__ == "__main__":
+
+if __name__=="__main__":
 
     main()
